@@ -7,6 +7,9 @@ import classes from './BurgerBuilder.module.css';
 import * as STRINGS from '../../util/strings';
 import Modal from '../../components/UI/Modal/Modal';
 import OrderSummary from '../../components/Burger/OrderSummary/OrderSummary';
+import Spinner from '../../components/UI/Spinner/Spinner';
+import withErrorHandler from '../../hoc/WithErrorHandler/WithErrorHandler';
+import axios from '../../axios-order';
 
 const INGREDIENT_PRICES = {
     salad: 0.5,
@@ -19,16 +22,27 @@ class BuigerBuilder extends Component {
 
     // state
     state = {
-        ingredients: {
-            salad: 0,
-            bacon: 0,
-            cheese: 0,
-            meat: 0
-        },
+        ingredients: null,
         totalPrice: 5.0,
         purchasable: false,
         purchasing: false,
+        loading: false,
+        error: null
     };
+
+    componentDidMount() {
+        // getting ingredient
+        axios.get('/ingredients.json')
+            .then(res => {
+                this.setState({
+                    ingredients: res.data
+                })
+            })
+            .catch(e => {
+                this.setState({error: e});
+            });
+        
+    }
 
     purchaseHandler = () => {
         this.setState({
@@ -88,7 +102,31 @@ class BuigerBuilder extends Component {
     }
 
     purchaseContinueHandler = () => {
-        alert('continue');
+        this.setState({loading: true});
+
+        const data = {
+            ingredients: this.state.ingredients,
+            price: this.state.totalPrice,
+            customer: {
+                name: 'JKTAN',
+                address: {
+                    street: 'Test Street 1',
+                    zipCode: '81300',
+                    country: 'Malaysia'
+                },
+                email: 'jktan0504@hotmail.com',
+                deliveryMethod: 'fastest'
+            }
+        };
+        axios.post('/orders.json', data)
+            .then(response => {
+                console.log(response);
+                this.setState({loading: false, purchasing: false});
+            })
+            .catch(e => {
+                console.log(e);
+                this.setState({loading: false, purchasing: false});
+            })
     }
 
 
@@ -101,6 +139,39 @@ class BuigerBuilder extends Component {
             disabledInfo[key] = disabledInfo[key] <= 0;
         }
 
+        let orderSummary = null;
+
+        if (this.state.loading) {
+            orderSummary = <Spinner />;
+        }
+
+        let burger = !this.state.error ? (
+            <Aux>
+                <Spinner />
+            </Aux>
+        ) : <p>{this.state.error.message}</p>;
+
+        if (this.state.ingredients) {
+            burger = (
+                <Aux>
+                    <Burger ingredients={this.state.ingredients}/>
+                    <BuildControls 
+                        ingredientAdded={this.addIngredientHandler}
+                        ingredientRemoved={this.removeIngredientHandler}
+                        disabled={disabledInfo}
+                        purchasable={this.state.purchasable}
+                        totalPrice={this.state.totalPrice}
+                        ordered={this.purchaseHandler}
+                    />
+                </Aux>
+            );
+            orderSummary =  <OrderSummary ingredients={this.state.ingredients} 
+                purchaseContinue={this.purchaseContinueHandler}
+                purchaseCancel={this.purchaseCancelHandler}
+                totalPrice={this.state.totalPrice}
+            />;
+        }
+
 
         return (
             <Aux>
@@ -108,25 +179,15 @@ class BuigerBuilder extends Component {
                     { STRINGS.BURGER_BUILDER_TITLE }
                 </div>
                 <Modal show={this.state.purchasing} modalClosed={this.purchaseCancelHandler}>
-                    <OrderSummary ingredients={this.state.ingredients} 
-                        purchaseContinue={this.purchaseContinueHandler}
-                        purchaseCancel={this.purchaseCancelHandler}
-                        totalPrice={this.state.totalPrice}
-                    />
+                    {
+                        orderSummary
+                    }
                 </Modal>
-                <Burger ingredients={this.state.ingredients}/>
-                <BuildControls 
-                    ingredientAdded={this.addIngredientHandler}
-                    ingredientRemoved={this.removeIngredientHandler}
-                    disabled={disabledInfo}
-                    purchasable={this.state.purchasable}
-                    totalPrice={this.state.totalPrice}
-                    ordered={this.purchaseHandler}
-                />
+                {burger}
             </Aux>
         );
     }
 
 }
 
-export default BuigerBuilder;
+export default withErrorHandler(BuigerBuilder, axios);
